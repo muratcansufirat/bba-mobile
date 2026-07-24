@@ -1,0 +1,40 @@
+{
+  "name": "@workspace/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "hello": "tsx ./src/hello.ts",
+    "supabase-tablolar": "tsx ./src/supabase-tablolar.ts",
+    "users-sutunlar": "tsx ./src/users-sutunlar.ts",
+    "bba-conversations-sutunlar": "tsx ./src/bba-conversations-sutunlar.ts",
+    "bba-messages-sutunlar": "tsx ./src/bba-messages-sutunlar.ts",
+    "bba-message-sources-tablo": "tsx ./src/bba-message-sources-tablo.ts",
+    "bba-messages-sender-check": "tsx ./src/bba-messages-sender-check.ts",
+    "community-messages-sutunlar": "tsx ./src/community-messages-sutunlar.ts",
+    "community-messages-reply": "tsx ./src/community-messages-reply.ts",
+    "community-messages-like": "tsx ./src/community-messages-like.ts",
+    "community-message-likes-tablo": "tsx ./src/community-message-likes-tablo.ts",
+    "sessions-sutunlar": "tsx ./src/sessions-sutunlar.ts",
+    "announcements-sutunlar": "tsx ./src/announcements-sutunlar.ts",
+    "app-settings-sutunlar": "tsx ./src/app-settings-sutunlar.ts",
+    "foreign-keys": "tsx ./src/foreign-keys.ts",
+    "rls-aktif": "tsx ./src/rls-aktif.ts",
+    "rls-users-policy": "tsx ./src/rls-users-policy.ts",
+    "supa-kurulum": "tsx ./src/supa-kurulum.ts",
+    "bilgi-yukle": "tsx ./src/bilgi-yukle.ts",
+    "docx-yukle": "tsx ./src/docx-yukle.ts",
+    "embedding-olustur": "tsx ./src/embedding-olustur.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "mammoth": "^1.12.0",
+    "openai": "^6.47.0",
+    "pg": "^8.13.3"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "^8.11.14",
+    "tsx": "catalog:"
+  }
+}
