@@ -44,6 +44,20 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
-# Replit
+# Local caches
 .cache/
 .local/
+
+# local runtime logs
+*.log
+
+# dependencies
+.pnpm-store
+
+# local secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example

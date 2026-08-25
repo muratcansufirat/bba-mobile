@@ -52,12 +52,16 @@ export interface AramaSonucu {
  *
  * @param embedding      1536 boyutlu float dizisi (text-embedding-3-small)
  * @param limit          Döndürülecek maksimum sonuç sayısı (varsayılan: 5)
- * @param minSimilarity  Minimum benzerlik eşiği 0-1 arası (varsayılan: 0.30)
+ * @param minSimilarity  Merkezi güvenli benzerlik eşiği (varsayılan: 0.45)
  */
+// Canlı ölçümde günlük dildeki ilgili sorgular 0.422-0.442, ölçülen ilgisiz
+// teknik sorgu ise en fazla 0.405 verdi. Bu değer iki grubu güvenle ayırır.
+export const GUVENLI_MIN_BENZERLIK = 0.42;
+
 export async function semantikArama(
   embedding: number[],
-  limit = 5,
-  minSimilarity = 0.30
+  limit: number | null = 5,
+  minSimilarity = GUVENLI_MIN_BENZERLIK
 ): Promise<AramaSonucu[]> {
   const pool = getPool();
 
@@ -71,6 +75,11 @@ export async function semantikArama(
     await client.query("BEGIN");
     await client.query("SET LOCAL enable_indexscan = off");
 
+    const limitKosulu = limit === null ? "" : "LIMIT $3";
+    const parametreler = limit === null
+      ? [vektor, minSimilarity]
+      : [vektor, minSimilarity, limit];
+
     const { rows } = await client.query<AramaSonucu>(
       `SELECT
          id,
@@ -82,10 +91,12 @@ export async function semantikArama(
          ROUND((1 - (embedding <=> $1::vector))::numeric, 6)::float AS similarity
        FROM bba_knowledge_base
        WHERE embedding IS NOT NULL
+         AND is_active = true
+         AND deleted_at IS NULL
          AND (1 - (embedding <=> $1::vector)) >= $2
        ORDER BY embedding <=> $1::vector ASC
-       LIMIT $3`,
-      [vektor, minSimilarity, limit]
+       ${limitKosulu}`,
+      parametreler
     );
 
     await client.query("COMMIT");

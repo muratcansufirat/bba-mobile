@@ -54,7 +54,7 @@ async function ana() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     console.error("Hata: OPENAI_API_KEY ortam değişkeni tanımlı değil.");
-    console.error("Replit Secrets bölümünden OPENAI_API_KEY değerini ekleyin.");
+    console.error("API sunucusunun .env dosyasına OPENAI_API_KEY değerini ekleyin.");
     process.exit(1);
   }
 

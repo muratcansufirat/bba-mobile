@@ -122,6 +122,7 @@ function AnaSekmeler() {
           ),
         }}
       />
+      <Tabs.Screen name="hafizalar" options={{ href: null }} />
     </Tabs>
   );
 }

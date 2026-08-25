@@ -25,6 +25,7 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="giris-geri-donus" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(ana)" />
     </Stack>

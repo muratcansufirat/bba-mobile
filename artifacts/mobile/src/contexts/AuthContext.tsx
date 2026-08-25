@@ -2,10 +2,13 @@ import type { Session } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { googleIleGirisYap } from "@/src/lib/googleAuth";
+import { hesabiKaliciSil } from "@/src/lib/hesap";
 import { supabase } from "@/src/lib/supabase";
 import { BOŞ_PROFİL, KullaniciProfili, kullaniciDanProfilOlustur } from "@/src/types/profil";
 
 type SonucDurumu = { hata: string | null };
+
+const AUTH_YUKLEME_ZAMAN_ASIMI_MS = 8_000;
 
 type AuthDurumu = {
   girisYapildi: boolean;
@@ -19,6 +22,7 @@ type AuthDurumu = {
   ) => Promise<SonucDurumu & { epostaDogrulamaGerekli: boolean }>;
   googleIleGiris: () => Promise<SonucDurumu>;
   cikisYap: () => Promise<void>;
+  hesabiSil: () => Promise<SonucDurumu>;
   profilGuncelle: (yeniProfil: Partial<KullaniciProfili>) => Promise<SonucDurumu>;
 };
 
@@ -30,6 +34,7 @@ const AuthContext = createContext<AuthDurumu>({
   kayitOlEposta: async () => ({ hata: "Bağlam mevcut değil.", epostaDogrulamaGerekli: false }),
   googleIleGiris: async () => ({ hata: "Bağlam mevcut değil." }),
   cikisYap: async () => {},
+  hesabiSil: async () => ({ hata: "Bağlam mevcut değil." }),
   profilGuncelle: async () => ({ hata: "Bağlam mevcut değil." }),
 });
 
@@ -89,18 +94,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session?.user?.id]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    let aktif = true;
+    let ilkYuklemeTamamlandi = false;
+
+    const ilkYuklemeyiBitir = (yeniOturum: Session | null) => {
+      if (!aktif || ilkYuklemeTamamlandi) return;
+      ilkYuklemeTamamlandi = true;
+      clearTimeout(zamanAsimi);
+      setSession(yeniOturum);
       ilkYuklemeYapildi.current = true;
+      setYukleniyor(false);
+    };
+
+    const zamanAsimi = setTimeout(() => {
+      ilkYuklemeyiBitir(null);
+    }, AUTH_YUKLEME_ZAMAN_ASIMI_MS);
+
+    void supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        ilkYuklemeyiBitir(error ? null : data.session);
+      })
+      .catch(() => {
+        ilkYuklemeyiBitir(null);
+      });
+
+    const { data: dinleyici } = supabase.auth.onAuthStateChange((_olay, yeniOturum) => {
+      if (!aktif) return;
+      if (!ilkYuklemeYapildi.current) {
+        ilkYuklemeyiBitir(yeniOturum);
+        return;
+      }
+      setSession(yeniOturum);
       setYukleniyor(false);
     });
 
-    const { data: dinleyici } = supabase.auth.onAuthStateChange((_olay, yeniOturum) => {
-      setSession(yeniOturum);
-      if (ilkYuklemeYapildi.current) setYukleniyor(false);
-    });
-
-    return () => dinleyici.subscription.unsubscribe();
+    return () => {
+      aktif = false;
+      clearTimeout(zamanAsimi);
+      dinleyici.subscription.unsubscribe();
+    };
   }, []);
 
   const girisYapEposta = async (eposta: string, sifre: string): Promise<SonucDurumu> => {
@@ -150,6 +183,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const hesabiSil = async (): Promise<SonucDurumu> => {
+    try {
+      await hesabiKaliciSil();
+      setDbHitapAdi("");
+      sonKullaniciId.current = null;
+      await supabase.auth.signOut({ scope: "local" });
+      setSession(null);
+      return { hata: null };
+    } catch (error) {
+      return { hata: error instanceof Error ? error.message : "Hesap silinemedi." };
+    }
+  };
+
   const profilGuncelle = async (yeniProfil: Partial<KullaniciProfili>): Promise<SonucDurumu> => {
     if (yeniProfil.adSoyad === undefined) return { hata: null };
     const yeniAd = yeniProfil.adSoyad.trim();
@@ -187,6 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         kayitOlEposta,
         googleIleGiris,
         cikisYap,
+        hesabiSil,
         profilGuncelle,
       }}
     >

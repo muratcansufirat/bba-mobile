@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -21,13 +22,15 @@ const BEYAZ = "#FFFFFF";
 const KIRMIZI = "#FF453A";
 
 export default function HesabimEkrani() {
-  const { profil, profilGuncelle, cikisYap } = useAuth();
+  const { profil, profilGuncelle, cikisYap, hesabiSil } = useAuth();
   const { tema, setTema, yaziBoyutu, setYaziBoyutu, renkler, olcek, t } = useGorunum();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const [takmaIsim, setTakmaIsim] = useState(profil.adSoyad);
   const [isimDuzenleniyor, setIsimDuzenleniyor] = useState(false);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [hesapSiliniyor, setHesapSiliniyor] = useState(false);
 
   const [gorunumAcik, setGorunumAcik] = useState(false);
   const [hakkindaAcik, setHakkindaAcik] = useState(false);
@@ -86,6 +89,38 @@ export default function HesabimEkrani() {
         { text: t("iptal"), style: "cancel" },
         { text: t("cikisYap"), style: "destructive", onPress: () => cikisYap() },
       ]
+    );
+  }
+
+  async function hesapSilmeIsleminiYap() {
+    if (hesapSiliniyor) return;
+    setHesapSiliniyor(true);
+    const { hata } = await hesabiSil();
+    setHesapSiliniyor(false);
+    if (hata) Alert.alert(t("hata"), hata);
+  }
+
+  function hesapSilmeOnayi() {
+    Alert.alert(
+      t("hesabimiSil"),
+      t("hesapSilmeUyari"),
+      [
+        { text: t("iptal"), style: "cancel" },
+        {
+          text: t("hesapSilmeDevam"),
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              t("hesabimiSil"),
+              t("hesapSilmeSonOnay"),
+              [
+                { text: t("iptal"), style: "cancel" },
+                { text: t("hesabimiSil"), style: "destructive", onPress: () => void hesapSilmeIsleminiYap() },
+              ],
+            );
+          },
+        },
+      ],
     );
   }
 
@@ -168,6 +203,16 @@ export default function HesabimEkrani() {
         {/* ── Ayarlar ── */}
         <Text style={styles.grupBasligi}>{t("ayarlarBaslik")}</Text>
         <View style={styles.kart}>
+          <TouchableOpacity style={styles.satirRow} onPress={() => router.push("/(ana)/hafizalar")} activeOpacity={0.7}>
+            <View style={styles.satirSol}>
+              <Feather name="database" size={16} color={MAVI} style={styles.ikon} />
+              <Text style={styles.satirEtiket}>{t("hafizalarim")}</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={renkler.griMetin} />
+          </TouchableOpacity>
+
+          <View style={styles.ayirac} />
+
           <TouchableOpacity style={styles.satirRow} onPress={() => setGorunumAcik(true)} activeOpacity={0.7}>
             <View style={styles.satirSol}>
               <Feather name="sun" size={16} color={MAVI} style={styles.ikon} />
@@ -208,6 +253,23 @@ export default function HesabimEkrani() {
             <View style={styles.satirSol}>
               <Feather name="log-out" size={16} color={KIRMIZI} style={styles.ikon} />
               <Text style={[styles.satirEtiket, { color: KIRMIZI }]}>{t("cikisYap")}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Hesabı kalıcı sil ── */}
+        <View style={[styles.kart, { marginTop: 12 }]}>
+          <TouchableOpacity
+            style={styles.satirRow}
+            onPress={hesapSilmeOnayi}
+            activeOpacity={0.7}
+            disabled={hesapSiliniyor}
+          >
+            <View style={styles.satirSol}>
+              <Feather name="trash-2" size={16} color={KIRMIZI} style={styles.ikon} />
+              <Text style={[styles.satirEtiket, { color: KIRMIZI, opacity: hesapSiliniyor ? 0.6 : 1 }]}>
+                {hesapSiliniyor ? t("hesapSiliniyor") : t("hesabimiSil")}
+              </Text>
             </View>
           </TouchableOpacity>
         </View>
