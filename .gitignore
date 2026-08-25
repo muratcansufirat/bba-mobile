@@ -50,6 +50,12 @@ Thumbs.db
 
 # local runtime logs
 *.log
+*.log.*
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # dependencies
 .pnpm-store
