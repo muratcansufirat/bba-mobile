@@ -3,7 +3,12 @@ import { z } from "zod";
 import { aramaSorgusunuTurkcelestir, embeddingOlustur } from "../lib/embedding";
 import { GUVENLI_MIN_BENZERLIK, semantikArama } from "../lib/arama";
 import { cevapUret } from "../lib/cevap";
-import { hafizayiMesajdanGuncelle, ilgiliHafizalariSec, kullanicihafizasiniGetir } from "../lib/hafiza";
+import {
+  hafizayiMesajdanGuncelle,
+  ilgiliHafizalariSec,
+  kullanicihafizasiniGetir,
+  mesajdanHitapSekliCikar,
+} from "../lib/hafiza";
 import { getAdminPool } from "../middleware/admin";
 
 const router: IRouter = Router();
@@ -106,6 +111,52 @@ router.post("/rag", async (req, res) => {
   const userId = res.locals["authUserId"] as string;
 
   try {
+    // Açık hitap değiştirme komutları bilgi sorusu değildir. Bunları embedding,
+    // semantik arama ve OpenAI akışına sokmadan hafızaya kaydet ve kısa onay ver.
+    const hitapSekli = mesajdanHitapSekliCikar(soru);
+    if (hitapSekli) {
+      if (conversationId && memoryEnabled) {
+        await hafizayiMesajdanGuncelle(userId, conversationId, soru);
+      }
+
+      const cevap = `Tamam ${hitapSekli}, bundan sonra sana ${hitapSekli} diye hitap edeceğim.`;
+      await olcumuKaydet({
+        userId,
+        conversationId,
+        status: "no_source",
+        durationMs: performance.now() - baslangic,
+        sourceCount: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        embeddingTokens: 0,
+      }).catch((error: unknown) => req.log.warn({ err: error }, "Hitap tercihi ölçümü kaydedilemedi"));
+
+      if (stream) {
+        res.status(200);
+        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("Connection", "keep-alive");
+        res.flushHeaders();
+        sseYaz(res, "token", { parca: cevap });
+        sseYaz(res, "done", {
+          cevap,
+          kullanilanKaynaklar: [],
+          kaynakBulundu: false,
+          "aramaToplamı": 0,
+        });
+        res.end();
+        return;
+      }
+
+      res.json({
+        cevap,
+        kullanilanKaynaklar: [],
+        kaynakBulundu: false,
+        aramaToplamı: 0,
+      });
+      return;
+    }
+
     // Mobil istemci ilk beş saniye içinde sunucudan veri görmezse bağlantıyı
     // zaman aşımı olarak kapatır. Uzun sürebilen embedding ve kaynak aramasına
     // başlamadan önce SSE bağlantısını açıp güvenli bir hazırlık olayı gönder.

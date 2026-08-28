@@ -134,6 +134,16 @@ function mesajdanHafizaCikar(mesaj: string): HafizaKaydi[] {
   return sonuclar;
 }
 
+/**
+ * Açık bir hitap tercihini RAG sorusundan ayırmak için kullanılır.
+ * Böylece "Bana Deniz diye hitap et" gibi komutlar bilgi tabanına gönderilmez.
+ */
+export function mesajdanHitapSekliCikar(mesaj: string): string | null {
+  return mesajdanHafizaCikar(mesaj).find(
+    (kayit) => kayit.memory_type === "nickname",
+  )?.content ?? null;
+}
+
 async function aktifHafizaIcinYerAc(
   client: PoolClient,
   userId: string,
