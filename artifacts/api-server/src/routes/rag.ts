@@ -9,7 +9,7 @@ import {
   kullanicihafizasiniGetir,
   mesajdanHitapSekliCikar,
 } from "../lib/hafiza";
-import { getAdminPool } from "../middleware/admin";
+import { performanceMetricKaydet } from "../lib/performance-metrics";
 
 const router: IRouter = Router();
 const GPT_4O_MINI_INPUT_USD_PER_MILLION = 0.15;
@@ -33,6 +33,11 @@ async function olcumuKaydet(veri: {
   promptTokens: number;
   completionTokens: number;
   embeddingTokens: number;
+  firstResponseMs?: number;
+  firstTokenMs?: number;
+  embeddingMs?: number;
+  searchMs?: number;
+  generationMs?: number;
   errorCode?: string;
 }): Promise<void> {
   const maliyet = (
@@ -40,17 +45,13 @@ async function olcumuKaydet(veri: {
     + veri.completionTokens * GPT_4O_MINI_OUTPUT_USD_PER_MILLION
     + veri.embeddingTokens * EMBEDDING_3_SMALL_USD_PER_MILLION
   ) / 1_000_000;
-  await getAdminPool().query(
-    `insert into public.api_usage_metrics
-       (auth_user_id, conversation_id, status, duration_ms, source_count,
-        prompt_tokens, completion_tokens, embedding_tokens, estimated_cost_usd,
-        chat_model, embedding_model, error_code)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'gpt-4o-mini',
-             'text-embedding-3-small', $10)`,
-    [veri.userId, veri.conversationId ?? null, veri.status, Math.max(0, Math.round(veri.durationMs)),
-      veri.sourceCount, veri.promptTokens, veri.completionTokens, veri.embeddingTokens,
-      maliyet, veri.errorCode ?? null],
-  );
+  await performanceMetricKaydet({
+    ...veri,
+    operation: "rag",
+    estimatedCostUsd: maliyet,
+    chatModel: "gpt-4o-mini",
+    embeddingModel: "text-embedding-3-small",
+  });
 }
 // Canlı pozitif/negatif örnek ölçümlerinde 0.40, teknik ve konu dışı bir
 // soruyu yanlış eşleştirdi (0.405). 0.45 gerçek BBA sorularını korurken
@@ -94,6 +95,11 @@ router.post("/rag", async (req, res) => {
   let istemciIptalEtti = false;
   let embeddingTokens = 0;
   let sourceCount = 0;
+  let firstResponseMs: number | undefined;
+  let firstTokenMs: number | undefined;
+  let embeddingMs: number | undefined;
+  let searchMs: number | undefined;
+  let generationMs: number | undefined;
   req.once("aborted", () => { istemciIptalEtti = true; });
   res.once("close", () => { if (!res.writableEnded) istemciIptalEtti = true; });
   const sonuc = RagIstek.safeParse(req.body);
@@ -167,6 +173,7 @@ router.post("/rag", async (req, res) => {
       res.setHeader("Connection", "keep-alive");
       res.flushHeaders();
       sseYaz(res, "status", { durum: "hazirlaniyor" });
+      firstResponseMs = performance.now() - baslangic;
     }
 
     // Bilgi tabanı Türkçe olduğu için İngilizce sorular yalnızca kaynak araması
@@ -180,8 +187,10 @@ router.post("/rag", async (req, res) => {
 
     // 1. Soru → embedding + hafıza okuma paralel
     // Hafıza hatası RAG akışını engellemez — boş dizi ile devam edilir.
+    const embeddingBaslangici = performance.now();
     const [embedding, hafiza] = await Promise.all([
-      embeddingOlustur(aramaSorgusu, (olcum) => { embeddingTokens = olcum.tokens; }),
+      embeddingOlustur(aramaSorgusu, (olcum) => { embeddingTokens = olcum.tokens; })
+        .finally(() => { embeddingMs = performance.now() - embeddingBaslangici; }),
       userId && memoryEnabled
         ? kullanicihafizasiniGetir(userId).catch((err: unknown) => {
             req.log.warn({ err, userId }, "Hafıza okuma başarısız, boş devam");
@@ -194,10 +203,13 @@ router.post("/rag", async (req, res) => {
     // 2. Semantik arama
     // Bilgi tabanının tamamı exact olarak taranır ve eşik üzerindeki bütün
     // ilgili parçalar alınır; aynı kaynağa ait parçalar burada atılmaz.
+    const aramaBaslangici = performance.now();
     const kaynaklar = await semantikArama(embedding, null, GUVENLI_MIN_BENZERLIK);
+    searchMs = performance.now() - aramaBaslangici;
     sourceCount = kaynaklar.length;
 
     // 3. GPT-4o-mini ile cevap üret
+    const uretimBaslangici = performance.now();
     const { cevap, kullanilanKaynaklar, kaynakBulundu, kullanim } = await cevapUret(
       soru,
       kaynaklar,
@@ -206,11 +218,13 @@ router.post("/rag", async (req, res) => {
       stream
         ? {
             onParca: (parca) => {
+              if (firstTokenMs == null) firstTokenMs = performance.now() - baslangic;
               if (!res.writableEnded) sseYaz(res, "token", { parca });
             },
           }
         : {}
     );
+    generationMs = performance.now() - uretimBaslangici;
     if (kaynakBulundu && kullanilanKaynaklar.length === 0) {
       throw new Error("Kaynak kullanan cevap kaynak bilgisi olmadan tamamlanamaz.");
     }
@@ -224,6 +238,11 @@ router.post("/rag", async (req, res) => {
       promptTokens: kullanim?.prompt_tokens ?? 0,
       completionTokens: kullanim?.completion_tokens ?? 0,
       embeddingTokens,
+      firstResponseMs,
+      firstTokenMs,
+      embeddingMs,
+      searchMs,
+      generationMs,
     }).catch((error: unknown) => req.log.warn({ err: error }, "RAG ölçümü kaydedilemedi"));
 
     if (conversationId && memoryEnabled) {
@@ -263,6 +282,11 @@ router.post("/rag", async (req, res) => {
       promptTokens: 0,
       completionTokens: 0,
       embeddingTokens,
+      firstResponseMs,
+      firstTokenMs,
+      embeddingMs,
+      searchMs,
+      generationMs,
       errorCode: err instanceof Error ? err.name.slice(0, 120) : "UnknownError",
     }).catch((error: unknown) => req.log.warn({ err: error }, "Başarısız RAG ölçümü kaydedilemedi"));
     if (res.headersSent) {

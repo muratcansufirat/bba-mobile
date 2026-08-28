@@ -5,6 +5,7 @@ import hafizaRouter from "./hafiza";
 import adminRouter from "./admin";
 import voiceRouter from "./voice";
 import accountRouter from "./account";
+import performanceRouter from "./performance";
 import { jwtDogrula } from "../middleware/auth";
 import { ipRateLimit, kullaniciRateLimit } from "../middleware/rate-limit";
 
@@ -15,6 +16,7 @@ router.use(ipRateLimit);
 router.use(jwtDogrula);
 router.use(kullaniciRateLimit);
 router.use(accountRouter);
+router.use(performanceRouter);
 router.use(adminRouter);
 router.use(voiceRouter);
 router.use(ragRouter);

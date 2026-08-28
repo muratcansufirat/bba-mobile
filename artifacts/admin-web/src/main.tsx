@@ -62,7 +62,7 @@ type AnalyticsReport = {
   periodDays: number;
   generatedAt: string;
   totals: { registeredUsers: number; newUsers: number; activeUsers: number; conversations: number; userMessages: number; bbaMessages: number; sourcedAnswers: number; activeKnowledge: number; failedEmbeddings: number };
-  performance: { sampleCount: number; averageResponseMs: number; p95ResponseMs: number; trackedRequests: number; successfulRequests: number; errors: number; timeouts: number; cancelled: number; trackedAverageMs: number; promptTokens: number; completionTokens: number; embeddingTokens: number; estimatedCostUsd: number; errorBreakdown: Record<string, number> };
+  performance: { sampleCount: number; averageResponseMs: number; p95ResponseMs: number; trackedRequests: number; successfulRequests: number; errors: number; timeouts: number; cancelled: number; trackedAverageMs: number; firstResponseAverageMs: number; firstTokenAverageMs: number; embeddingAverageMs: number; searchAverageMs: number; generationAverageMs: number; voiceFirstByteAverageMs: number; conversationLoadAverageMs: number; conversationLoadMaxItems: number; promptTokens: number; completionTokens: number; embeddingTokens: number; estimatedCostUsd: number; errorBreakdown: Record<string, number> };
   daily: { date: string; userMessages: number; bbaMessages: number }[];
 };
 
@@ -520,6 +520,13 @@ function App() {
             <div className="telemetryGrid">
               <article><span>Ölçülen soru</span><strong>{analytics.performance.trackedRequests}</strong><small>{analytics.performance.successfulRequests} tamamlandı</small></article>
               <article><span>Backend ortalaması</span><strong>{formatDuration(analytics.performance.trackedAverageMs)}</strong><small>Uçtan uca RAG</small></article>
+              <article><span>İlk sunucu yanıtı</span><strong>{formatDuration(analytics.performance.firstResponseAverageMs)}</strong><small>Streaming hazırlık</small></article>
+              <article><span>İlk metin parçası</span><strong>{formatDuration(analytics.performance.firstTokenAverageMs)}</strong><small>Gerçek cevap başlangıcı</small></article>
+              <article><span>Embedding</span><strong>{formatDuration(analytics.performance.embeddingAverageMs)}</strong><small>Ortalama</small></article>
+              <article><span>RAG araması</span><strong>{formatDuration(analytics.performance.searchAverageMs)}</strong><small>Supabase vektör araması</small></article>
+              <article><span>Cevap üretimi</span><strong>{formatDuration(analytics.performance.generationAverageMs)}</strong><small>OpenAI</small></article>
+              <article><span>Ses başlangıcı</span><strong>{formatDuration(analytics.performance.voiceFirstByteAverageMs)}</strong><small>İlk ses verisi</small></article>
+              <article><span>Sohbet yükleme</span><strong>{formatDuration(analytics.performance.conversationLoadAverageMs)}</strong><small>En çok {analytics.performance.conversationLoadMaxItems} mesaj</small></article>
               <article><span>Hata</span><strong>{analytics.performance.errors}</strong><small>Sunucu/OpenAI</small></article>
               <article><span>Timeout</span><strong>{analytics.performance.timeouts}</strong><small>{analytics.performance.cancelled} iptal</small></article>
               <article><span>Tahmini maliyet</span><strong>${Number(analytics.performance.estimatedCostUsd).toFixed(4)}</strong><small>Seçili dönem</small></article>

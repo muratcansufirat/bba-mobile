@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import OpenAI, { toFile } from "openai";
+import { performanceMetricKaydet } from "../lib/performance-metrics";
 
 const router: IRouter = Router();
 let openai: OpenAI | null = null;
@@ -71,6 +72,10 @@ const sesYukle = multer({
 
 router.post(
   "/voice/upload",
+  (_req, res, next) => {
+    res.locals["voiceRequestStartedAt"] = performance.now();
+    next();
+  },
   (req, res, next) => {
     sesYukle.single("audio")(req, res, (error) => {
       if (!error) {
@@ -141,12 +146,25 @@ router.post(
         mimeType: req.file.mimetype,
         transcript: metin,
       });
+      void performanceMetricKaydet({
+        userId,
+        operation: "voice_upload",
+        status: "success",
+        durationMs: performance.now() - (res.locals["voiceRequestStartedAt"] as number),
+      }).catch((metricError: unknown) => req.log.warn({ err: metricError }, "Ses yükleme ölçümü kaydedilemedi"));
     } catch (error) {
       req.log.error(
         { authUserId: userId, receiptId, err: error },
         "Ses kaydı metne dönüştürülemedi",
       );
       res.status(502).json({ hata: "Ses kaydı metne dönüştürülemedi. Lütfen yeniden deneyin." });
+      void performanceMetricKaydet({
+        userId,
+        operation: "voice_upload",
+        status: "error",
+        durationMs: performance.now() - (res.locals["voiceRequestStartedAt"] as number),
+        errorCode: error instanceof Error ? error.name : "unknown",
+      }).catch((metricError: unknown) => req.log.warn({ err: metricError }, "Ses yükleme hata ölçümü kaydedilemedi"));
     }
   },
 );
@@ -177,6 +195,7 @@ router.post("/voice/speech", (req, res) => {
 });
 
 router.get("/voice/speech/:audioId", async (req, res) => {
+  const baslangic = performance.now();
   suresiDolanSesleriTemizle();
   const userId = res.locals["authUserId"] as string;
   const audioId = req.params["audioId"] ?? "";
@@ -230,8 +249,10 @@ router.get("/voice/speech/:audioId", async (req, res) => {
 
     const parcalar: Buffer[] = [];
     let toplamBoyut = 0;
+    let firstByteMs: number | undefined;
     for await (const hamParca of sonuc.body) {
       const parca = Buffer.from(hamParca);
+      if (firstByteMs == null) firstByteMs = performance.now() - baslangic;
       toplamBoyut += parca.length;
       if (toplamBoyut > 5 * 1024 * 1024) throw new Error("Oluşturulan ses dosyası çok büyük.");
       parcalar.push(parca);
@@ -243,6 +264,13 @@ router.get("/voice/speech/:audioId", async (req, res) => {
     ses.metin = "";
     req.log.info({ authUserId: userId, audioId, byteLength: toplamBoyut }, "BBA cevabı akışla seslendirildi");
     res.end();
+    void performanceMetricKaydet({
+      userId,
+      operation: "voice_speech",
+      status: "success",
+      durationMs: performance.now() - baslangic,
+      firstByteMs,
+    }).catch((metricError: unknown) => req.log.warn({ err: metricError }, "Ses akışı ölçümü kaydedilemedi"));
   } catch (error) {
     if (!controller.signal.aborted) {
       req.log.error({ authUserId: userId, audioId, err: error }, "BBA ses akışı başarısız");
@@ -252,6 +280,13 @@ router.get("/voice/speech/:audioId", async (req, res) => {
     } else if (!res.writableEnded) {
       res.destroy(error instanceof Error ? error : undefined);
     }
+    void performanceMetricKaydet({
+      userId,
+      operation: "voice_speech",
+      status: controller.signal.aborted ? "cancelled" : "error",
+      durationMs: performance.now() - baslangic,
+      errorCode: error instanceof Error ? error.name : "unknown",
+    }).catch((metricError: unknown) => req.log.warn({ err: metricError }, "Ses akışı hata ölçümü kaydedilemedi"));
   }
 });
 

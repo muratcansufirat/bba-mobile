@@ -2,6 +2,7 @@ import { RagIstekHatasi, type RagSonucu } from "./rag";
 import { supabase } from "./supabase";
 import { hafizaKullanimiAcikMi } from "./hafizaAyarlari";
 import { API_BASE_URL as API_BASE } from "./apiConfig";
+import { performanceMetricGonder } from "./performanceMetric";
 const STREAM_TIMEOUT_MS = 60_000;
 // Sunucu en geç beş saniye içinde isteği kabul ettiğini belirten bir SSE olayı
 // göndermelidir. Bu ilk olaydan sonra gerçek cevap akışı için genel 60 saniyelik
@@ -65,6 +66,7 @@ export async function ragSorgusuStream(
   conversationId?: string,
   language: "tr" | "en" = "tr",
 ): Promise<RagSonucu> {
+  const istekBaslangici = performance.now();
   const [memoryEnabled, oturumSonucu] = await hazirlikAsamasiniZamanAsimliCalistir(
     Promise.all([hafizaKullanimiAcikMi(), supabase.auth.getSession()]),
     signal,
@@ -86,6 +88,7 @@ export async function ragSorgusuStream(
     let tampon = "";
     let tamamlandi = false;
     let ilkYanitAlindi = false;
+    let ilkTokenMs: number | undefined;
     let ilkYanitTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const abortDinleyicisi = () => xhr.abort();
@@ -101,6 +104,13 @@ export async function ragSorgusuStream(
       if (tamamlandi) return;
       tamamlandi = true;
       temizle();
+      void performanceMetricGonder({
+        operation: "client_rag",
+        status: hata.tur === "timeout" ? "timeout" : hata.tur === "iptal" ? "cancelled" : "error",
+        durationMs: performance.now() - istekBaslangici,
+        firstResponseMs: ilkTokenMs,
+        conversationId,
+      });
       reject(hata);
     };
 
@@ -110,7 +120,10 @@ export async function ragSorgusuStream(
 
       if (sse.olay === "token") {
         const veri = sse.veri as { parca?: unknown };
-        if (typeof veri.parca === "string") onParca(veri.parca);
+        if (typeof veri.parca === "string") {
+          if (ilkTokenMs == null) ilkTokenMs = performance.now() - istekBaslangici;
+          onParca(veri.parca);
+        }
         return;
       }
 
@@ -126,6 +139,13 @@ export async function ragSorgusuStream(
         }
         tamamlandi = true;
         temizle();
+        void performanceMetricGonder({
+          operation: "client_rag",
+          status: "success",
+          durationMs: performance.now() - istekBaslangici,
+          firstResponseMs: ilkTokenMs,
+          conversationId,
+        });
         resolve(sonuc);
         return;
       }

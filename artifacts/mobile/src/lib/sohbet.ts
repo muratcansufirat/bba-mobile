@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { performanceMetricGonder } from "./performanceMetric";
 
 // ── Tipler ──────────────────────────────────────────────────────────────────
 
@@ -153,8 +154,12 @@ export async function sonSohbetiYukle(userId: string): Promise<{
   conversationId: string | null;
   mesajlar: DbMesaj[];
 }> {
+  const yuklemeBaslangici = performance.now();
   const publicId = await publicUserIdGetir(userId);
-  if (!publicId) return { conversationId: null, mesajlar: [] };
+  if (!publicId) {
+    void performanceMetricGonder({ operation: "conversation_load", status: "error", durationMs: performance.now() - yuklemeBaslangici, itemCount: 0 });
+    return { conversationId: null, mesajlar: [] };
+  }
 
   const { data: conv } = await supabase
     .from("bba_conversations")
@@ -164,7 +169,10 @@ export async function sonSohbetiYukle(userId: string): Promise<{
     .limit(1)
     .maybeSingle();
 
-  if (!conv) return { conversationId: null, mesajlar: [] };
+  if (!conv) {
+    void performanceMetricGonder({ operation: "conversation_load", status: "success", durationMs: performance.now() - yuklemeBaslangici, itemCount: 0 });
+    return { conversationId: null, mesajlar: [] };
+  }
 
   const { data: msgs, error } = await supabase
     .from("bba_messages")
@@ -173,6 +181,13 @@ export async function sonSohbetiYukle(userId: string): Promise<{
     .order("created_at", { ascending: true });
 
   if (error || !msgs || msgs.length === 0) {
+    void performanceMetricGonder({
+      operation: "conversation_load",
+      status: error ? "error" : "success",
+      durationMs: performance.now() - yuklemeBaslangici,
+      itemCount: 0,
+      conversationId: conv.id as string,
+    });
     return { conversationId: conv.id as string, mesajlar: [] };
   }
 
@@ -180,6 +195,13 @@ export async function sonSohbetiYukle(userId: string): Promise<{
     sourcelarYukle(msgs),
     favorilerYukle(msgs),
   ]);
+  void performanceMetricGonder({
+    operation: "conversation_load",
+    status: "success",
+    durationMs: performance.now() - yuklemeBaslangici,
+    itemCount: msgs.length,
+    conversationId: conv.id as string,
+  });
   return {
     conversationId: conv.id as string,
     mesajlar: msgs.map((m) => rowToDbMesaj(m as Record<string, unknown>, sourcesMap, favoriMesajIdleri)),
@@ -196,6 +218,7 @@ export async function sohbetiYukle(
   limit = 40,
   signal?: AbortSignal,
 ): Promise<{ mesajlar: DbMesaj[]; devamVar: boolean }> {
+  const yuklemeBaslangici = performance.now();
   let sorgu = supabase
     .from("bba_messages")
     .select("*")
@@ -209,6 +232,13 @@ export async function sohbetiYukle(
   const { data: msgs, error } = await sorgu;
 
   if (error || !msgs || msgs.length === 0) {
+    void performanceMetricGonder({
+      operation: "conversation_load",
+      status: signal?.aborted ? "cancelled" : error ? "error" : "success",
+      durationMs: performance.now() - yuklemeBaslangici,
+      itemCount: 0,
+      conversationId,
+    });
     return { mesajlar: [], devamVar: false };
   }
 
@@ -218,6 +248,13 @@ export async function sohbetiYukle(
     sourcelarYukle(sayfa),
     favorilerYukle(sayfa),
   ]);
+  void performanceMetricGonder({
+    operation: "conversation_load",
+    status: "success",
+    durationMs: performance.now() - yuklemeBaslangici,
+    itemCount: sayfa.length,
+    conversationId,
+  });
   return {
     mesajlar: sayfa.map((m) => rowToDbMesaj(m as Record<string, unknown>, sourcesMap, favoriMesajIdleri)),
     devamVar,
