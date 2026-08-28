@@ -11,8 +11,7 @@
 
 import { supabase } from "./supabase";
 import { hafizaKullanimiAcikMi } from "./hafizaAyarlari";
-
-const API_BASE = process.env["EXPO_PUBLIC_API_BASE_URL"] ?? "";
+import { API_BASE_URL as API_BASE } from "./apiConfig";
 const RAG_TIMEOUT_MS = 30_000;
 
 export type RagHataTuru = "ag" | "timeout" | "sunucu" | "iptal";

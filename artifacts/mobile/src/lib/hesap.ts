@@ -1,6 +1,5 @@
 import { supabase } from "./supabase";
-
-const API_BASE = process.env["EXPO_PUBLIC_API_BASE_URL"] ?? "";
+import { API_BASE_URL as API_BASE } from "./apiConfig";
 
 export async function hesabiKaliciSil(): Promise<void> {
   const { data, error } = await supabase.auth.getSession();

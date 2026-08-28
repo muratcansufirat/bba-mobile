@@ -1,8 +1,7 @@
 import { RagIstekHatasi, type RagSonucu } from "./rag";
 import { supabase } from "./supabase";
 import { hafizaKullanimiAcikMi } from "./hafizaAyarlari";
-
-const API_BASE = process.env["EXPO_PUBLIC_API_BASE_URL"] ?? "";
+import { API_BASE_URL as API_BASE } from "./apiConfig";
 const STREAM_TIMEOUT_MS = 60_000;
 // Sunucu en geç beş saniye içinde isteği kabul ettiğini belirten bir SSE olayı
 // göndermelidir. Bu ilk olaydan sonra gerçek cevap akışı için genel 60 saniyelik

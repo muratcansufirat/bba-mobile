@@ -5,6 +5,12 @@ import { supabase } from "./supabase";
 import "./styles.css";
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+const API_REQUEST_TIMEOUT_MS = 15_000;
+const API_NETWORK_RETRY_DELAY_MS = 750;
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
 type AdminRole = "admin" | "editor" | "support";
 type MemberRole = AdminRole | "user";
 
@@ -190,10 +196,34 @@ function App() {
 
   const authorizedFetch = useCallback(async (path: string, options: RequestInit = {}, currentSession = session) => {
     if (!currentSession) throw new Error("Oturum bulunamadı.");
-    const response = await fetch(`${apiBase}${path}`, {
-      ...options,
-      headers: { ...options.headers, Authorization: `Bearer ${currentSession.access_token}` },
-    });
+    if (!apiBase) throw new Error("Yönetim API adresi yapılandırılmamış.");
+
+    let response: Response | null = null;
+    let lastNetworkError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+      try {
+        response = await fetch(`${apiBase}${path}`, {
+          ...options,
+          headers: { ...options.headers, Authorization: `Bearer ${currentSession.access_token}` },
+          signal: controller.signal,
+        });
+        break;
+      } catch (networkError) {
+        lastNetworkError = networkError;
+        if (attempt === 0) await wait(API_NETWORK_RETRY_DELAY_MS);
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
+    if (!response) {
+      if (lastNetworkError instanceof DOMException && lastNetworkError.name === "AbortError") {
+        throw new Error("Sunucu yanıt vermedi. Lütfen tekrar deneyin.");
+      }
+      throw new Error("Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.");
+    }
     if (response.status === 401) {
       await supabase.auth.signOut();
       throw new Error("Oturumunuz sona erdi. Lütfen tekrar giriş yapın.");
@@ -214,7 +244,10 @@ function App() {
       setRole(result.role ?? null); setPermissions(result.permissions ?? []);
     } catch (checkError) {
       setError(checkError instanceof Error ? checkError.message : "Yönetim yetkisi doğrulanamadı.");
-      await supabase.auth.signOut(); setSession(null);
+      const message = checkError instanceof Error ? checkError.message : "";
+      if (message === "Oturumunuz sona erdi. Lütfen tekrar giriş yapın.") {
+        setSession(null);
+      }
     } finally { setLoading(false); }
   }
 
@@ -425,9 +458,14 @@ function App() {
 
   async function login(event: React.FormEvent) {
     event.preventDefault(); setLoading(true); setError("");
-    const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-    if (loginError || !data.session) { setError("E-posta veya şifre hatalı."); setLoading(false); return; }
-    setSession(data.session); await adminSessionCheck(data.session);
+    try {
+      const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+      if (loginError || !data.session) { setError("E-posta veya şifre hatalı."); setLoading(false); return; }
+      setSession(data.session); await adminSessionCheck(data.session);
+    } catch {
+      setError("Giriş servisine bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.");
+      setLoading(false);
+    }
   }
 
   async function requestPasswordReset(event: React.FormEvent) {

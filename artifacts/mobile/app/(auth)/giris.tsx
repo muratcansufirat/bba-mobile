@@ -48,6 +48,7 @@ export default function GirisEkrani() {
   const { height } = useWindowDimensions();
   const [eposta, setEposta] = useState("");
   const [sifre, setSifre] = useState("");
+  const [sifreGorunur, setSifreGorunur] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [girisYukleniyor, setGirisYukleniyor] = useState(false);
   const [googleYukleniyor, setGoogleYukleniyor] = useState(false);
@@ -133,18 +134,33 @@ export default function GirisEkrani() {
 
             <View style={styles.inputGrup}>
               <Text style={styles.inputLabel}>{t("sifre")}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="••••••••"
-                placeholderTextColor="#6B7280"
-                value={sifre}
-                onChangeText={setSifre}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="go"
-                onSubmitEditing={girisYapTikla}
-              />
+              <View style={styles.sifreAlani}>
+                <TextInput
+                  style={styles.sifreInput}
+                  placeholder="••••••••"
+                  placeholderTextColor="#6B7280"
+                  value={sifre}
+                  onChangeText={setSifre}
+                  secureTextEntry={!sifreGorunur}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="go"
+                  onSubmitEditing={girisYapTikla}
+                />
+                <TouchableOpacity
+                  onPress={() => setSifreGorunur((gorunur) => !gorunur)}
+                  style={styles.gozButon}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={sifreGorunur ? "Şifreyi gizle" : "Şifreyi göster"}
+                >
+                  <Feather
+                    name={sifreGorunur ? "eye-off" : "eye"}
+                    size={18}
+                    color="#8E8E93"
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {hata ? <Text style={styles.hataMetin}>{hata}</Text> : null}
@@ -207,6 +223,9 @@ const styles = StyleSheet.create({
   inputGrup: { gap: 6 },
   inputLabel: { color: BEYAZ, fontSize: 13, fontFamily: "Inter_500Medium", marginLeft: 2 },
   input: { backgroundColor: "#111111", borderWidth: 1, borderColor: "#3A3A3A", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, color: BEYAZ, fontSize: 15, fontFamily: "Inter_400Regular" },
+  sifreAlani: { flexDirection: "row", alignItems: "center", backgroundColor: "#111111", borderWidth: 1, borderColor: "#3A3A3A", borderRadius: 10 },
+  sifreInput: { flex: 1, paddingLeft: 14, paddingRight: 6, paddingVertical: 13, color: BEYAZ, fontSize: 15, fontFamily: "Inter_400Regular" },
+  gozButon: { alignItems: "center", justifyContent: "center", alignSelf: "stretch", paddingHorizontal: 14 },
   hataMetin: { color: KIRMIZI, fontSize: 13, fontFamily: "Inter_500Medium", marginTop: -4 },
   ileriButon: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: MAVI, borderRadius: 50, paddingVertical: 14 },
   ileriMetin: { color: BEYAZ, fontSize: 16, fontFamily: "Inter_600SemiBold", letterSpacing: 0.2 },
