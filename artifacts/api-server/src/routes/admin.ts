@@ -84,7 +84,8 @@ const icerikYukle = multer({
     fileSize: 10 * 1024 * 1024,
     files: 1,
     fields: 0,
-    parts: 1,
+    // Busboy tam sınıra ulaşıldığında partsLimit yayımlar; tek dosyalı istek için sınır 2 olmalı.
+    parts: 2,
     fieldNameSize: 64,
   },
   fileFilter: (_req, file, callback) => {
