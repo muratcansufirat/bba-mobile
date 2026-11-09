@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Response } from "express";
 import { z } from "zod";
-import { aramaSorgusunuTurkcelestir, embeddingOlustur } from "../lib/embedding";
+import { aramaSorgusunuGenislet, aramaSorgusunuTurkcelestir, embeddingOlustur } from "../lib/embedding";
 import { GUVENLI_MIN_BENZERLIK, semantikArama } from "../lib/arama";
 import { cevapUret } from "../lib/cevap";
 import {
@@ -189,7 +189,7 @@ router.post("/rag", async (req, res) => {
     // Hafıza hatası RAG akışını engellemez — boş dizi ile devam edilir.
     const embeddingBaslangici = performance.now();
     const [embedding, hafiza] = await Promise.all([
-      embeddingOlustur(aramaSorgusu, (olcum) => { embeddingTokens = olcum.tokens; })
+      embeddingOlustur(aramaSorgusu, (olcum) => { embeddingTokens += olcum.tokens; })
         .finally(() => { embeddingMs = performance.now() - embeddingBaslangici; }),
       userId && memoryEnabled
         ? kullanicihafizasiniGetir(userId).catch((err: unknown) => {
@@ -204,7 +204,20 @@ router.post("/rag", async (req, res) => {
     // Bilgi tabanının tamamı exact olarak taranır ve eşik üzerindeki bütün
     // ilgili parçalar alınır; aynı kaynağa ait parçalar burada atılmaz.
     const aramaBaslangici = performance.now();
-    const kaynaklar = await semantikArama(embedding, null, GUVENLI_MIN_BENZERLIK);
+    let kaynaklar = await semantikArama(embedding, null, GUVENLI_MIN_BENZERLIK);
+    if (kaynaklar.length === 0) {
+      const genisletilmisSorgu = await aramaSorgusunuGenislet(aramaSorgusu).catch((err: unknown) => {
+        req.log.warn({ err, userId }, "Arama sorgusu genişletilemedi, ilk arama sonucu korunuyor");
+        return aramaSorgusu;
+      });
+      if (genisletilmisSorgu !== aramaSorgusu) {
+        const genisletilmisEmbedding = await embeddingOlustur(
+          genisletilmisSorgu,
+          (olcum) => { embeddingTokens += olcum.tokens; },
+        );
+        kaynaklar = await semantikArama(genisletilmisEmbedding, null, GUVENLI_MIN_BENZERLIK);
+      }
+    }
     searchMs = performance.now() - aramaBaslangici;
     sourceCount = kaynaklar.length;
 

@@ -12,6 +12,7 @@ const EMBEDDING_MODELI = "text-embedding-3-small";
 const ONBELLEK_SURESI_MS = 24 * 60 * 60 * 1000;
 const ONBELLEK_AZAMI_KAYIT = 500;
 const CEVIRI_ONBELLEK_AZAMI_KAYIT = 500;
+const GENISLETME_ONBELLEK_AZAMI_KAYIT = 500;
 
 interface EmbeddingOnbellekKaydi {
   embedding: number[];
@@ -21,6 +22,7 @@ interface EmbeddingOnbellekKaydi {
 const embeddingOnbellegi = new Map<string, EmbeddingOnbellekKaydi>();
 const devamEdenEmbeddingler = new Map<string, Promise<number[]>>();
 const turkceAramaSorgusuOnbellegi = new Map<string, string>();
+const genisletilmisAramaSorgusuOnbellegi = new Map<string, string>();
 let onbellekIsabeti = 0;
 let onbellekIskasi = 0;
 let birlestirilenIstek = 0;
@@ -82,6 +84,48 @@ export async function aramaSorgusunuTurkcelestir(metin: string): Promise<string>
   }
   turkceAramaSorgusuOnbellegi.set(anahtar, turkceSorgu);
   return turkceSorgu;
+}
+
+/**
+ * Günlük ve kısa bir ifade güvenli benzerlik eşiğinin altında kaldığında,
+ * aynı anlamı bilgi tabanındaki kavramsal dille yeniden ifade eder. Bu metin
+ * yalnızca ikinci arama için kullanılır; kullanıcı sorusunun veya cevabın
+ * yerine geçmez.
+ */
+export async function aramaSorgusunuGenislet(metin: string): Promise<string> {
+  const temizMetin = metin.normalize("NFKC").replace(/\s+/g, " ").trim();
+  if (!temizMetin) return temizMetin;
+
+  const anahtar = temizMetin.toLocaleLowerCase("tr-TR");
+  const onbellekteki = genisletilmisAramaSorgusuOnbellegi.get(anahtar);
+  if (onbellekteki) return onbellekteki;
+
+  const yanit = await getOpenAI().chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0,
+    max_tokens: 180,
+    messages: [
+      {
+        role: "system",
+        content: [
+          "Kullanıcının Türkçe sorusunu, anlamını ve amacını değiştirmeden semantik bilgi tabanı araması için yeniden yaz.",
+          "Günlük ifadeye karşılık gelen ruhsal, duygusal ve kavramsal terimleri açıkça ekle.",
+          "Soruyu cevaplama, yeni bir iddia ekleme, tavsiye verme veya konu dışına çıkma.",
+          "Tek bir bağımsız arama sorgusu döndür; etiket, açıklama ve tırnak kullanma.",
+        ].join(" "),
+      },
+      { role: "user", content: temizMetin },
+    ],
+  }, { timeout: 3_000, maxRetries: 0 });
+
+  const genisletilmis = yanit.choices[0]?.message?.content?.trim() || temizMetin;
+  while (genisletilmisAramaSorgusuOnbellegi.size >= GENISLETME_ONBELLEK_AZAMI_KAYIT) {
+    const enEski = genisletilmisAramaSorgusuOnbellegi.keys().next().value as string | undefined;
+    if (!enEski) break;
+    genisletilmisAramaSorgusuOnbellegi.delete(enEski);
+  }
+  genisletilmisAramaSorgusuOnbellegi.set(anahtar, genisletilmis);
+  return genisletilmis;
 }
 
 function embeddingAnahtari(metin: string): string {
