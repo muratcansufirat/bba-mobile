@@ -5,6 +5,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+app.disable("etag");
 const productionOrtami = process.env["NODE_ENV"] === "production";
 const gelistirmeOriginleri = new Set([
   "http://localhost:8081",

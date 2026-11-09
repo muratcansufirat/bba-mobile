@@ -6,6 +6,7 @@ import adminRouter from "./admin";
 import voiceRouter from "./voice";
 import accountRouter from "./account";
 import performanceRouter from "./performance";
+import communityRouter from "./community";
 import { jwtDogrula } from "../middleware/auth";
 import { ipRateLimit, kullaniciRateLimit } from "../middleware/rate-limit";
 
@@ -21,5 +22,6 @@ router.use(adminRouter);
 router.use(voiceRouter);
 router.use(ragRouter);
 router.use(hafizaRouter);
+router.use(communityRouter);
 
 export default router;
